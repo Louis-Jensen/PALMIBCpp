@@ -122,7 +122,7 @@ funsplitx = function(O,A,B,C = NULL) {
   }
 }
 
-# Cluster term obtained via simulation from collection of uncertainties.
+# PSF autoconvolution via simulation from collection of uncertainties.
 AN = function(r,s1,s2) {
   con = 2*pi*s1*s2*sqrt(1/s1^2+1/s2^2)*sqrt(s1^2+s2^2)
   rter = exp(-r^2/(2*(s1^2+s2^2)))
@@ -158,63 +158,81 @@ splitf.A.noint = function(A, r, B, sm) {
   o = t(apply( sm,1, function(k) funsplitx(k, A, B) ))
   return(o)
 }
-# Data postprocessing / tools ----
-# ---
-# Marked for deletion!
 
-# duplicate_remover = function(X,r) {
-#   xm = sort(unique(X$marks))
-#   xdf = X %$% data.frame(x = x, y = y, mar = marks)
-#   out = data.frame()
-#   
-#   for(m in xm) {
-#     wrp = xdf %>% filter(mar == m)
-#     if(nrow(wrp) == 1) {
-#       out = rbind(out, wrp)
-#       next
-#     }
-#     
-#     dt = dbscan::dbscan(wrp[,1:2], r, 1)
-#     wrpn = wrp %>% group_by(dt$cluster) %>% sample_n(., 1) %>% ungroup() %>% select(-'dt$cluster')
-#     
-#     out = rbind(out, wrpn)
-#     if(nrow(wrpn) < nrow(wrp)) {
-#       print(paste("Eliminated merging on frame: ", m, sep = ""))
-#     }
-#     
-#   }
-#   out = out %$% ppp(x,y,marks = mar, window = X$window)
-#   return(out)
-# }
-# 
-# data_grouper = function(X,sig,q = 0.99) {
-#   threshold = sig*sqrt(qchisq(q,2))
-#   print(paste("Grouping distance threshold: ", round(threshold,3), sep = ""))
-#   
-#   XO = X %$% data.frame(x = x, y = y, m = marks)
-#   
-#   xm = sort(unique(XO$m))
-#   out = data.frame()
-#   
-#   xmq = quantile(xm, seq(0,1,by = 0.1))[-c(1,10)]
-#   for(mm in xm) {
-#     if(mm %in% round(xmq,0) ) {print(paste("Processing frame:", mm, sep = ""))}
-#     CCurr = XO %>% filter(m == mm)
-#     CPrev = XO %>% filter(m == mm-1)
-#     
-#     if(nrow(CPrev) == 0) {
-#       out = rbind(out, CCurr)
-#       next
-#     }
-#     
-#     OM = dbscan::frNN(CPrev[,1:2], threshold, CCurr[,1:2])
-#     
-#     wk = which(unlist(lapply(OM$dist, length)) == 0)
-#     out = rbind(out, CCurr[wk,])
-#   }
-#   o = out %$% ppp(x = x, y = y, marks = m, window = X$window)
-#   return(o)
-# }
+PCPALM = function(dt,un, noptim = 5) { # PC-PALM method of Sengupta et. al.
+  sig = mean(un)
+  
+  pcf = trimmed_pcf(dt, un)
+  rs = pcf$Range
+  pcv = pcf$PCF$iso[rs]
+  
+  r = pcf$PCF$r[rs]
+  psf = 1/(4*pi*sig^2)*exp(-r^2/(4*sig^2))
+  
+  gmodel = function(par, plt = F) {
+    par = abs(par)
+    a = par[1]
+    b = par[2]
+    rho = (par[3]/intensity(dt))
+    gx = function(r) {return(a*exp(-r/b)+1)}
+    
+    intt = function(x) integrate(function(r) exp(-r^2/(4*sig^2))*2*pi*besselI(x*r/(2*sig^2),0)*gx(r)*r, 0, max(r)*2)$value
+    
+    conv = sapply(r, intt)
+    
+    o = psf*(rho+conv)
+    
+    if(plt) {
+      plot(pcv~r, type = "l", col = "green", lwd = 2)
+      points(o~r, type = "l", col = "orange", lwd = 2, lty = 2)
+      points(psf*rho+1~r, type = "l", col = "red", lwd = 1.5, lty = 2)
+      points(conv*psf~r, type = "l", lwd = 1.5, lty = 2)
+    }
+    return(o)
+  }
+  
+  f = function(par) {
+    par = abs(par)
+    v = pcv-gmodel(par)
+    return(sum(v^2))
+  }
+  
+  a = boptim.try(c(3,5), f, noptim, plt = F)
+  gmodel(a$par[1:3], T)
+  nc = abs(a$par[3])
+  return(list("Poisson_G" = nc, "Geometric_G" = nc/2+1))
+}
 
+dt_to_pp = function(dt) {
+  pp = ppp(dt$x, dt$y, marks = dt$frame, window = owin(range(dt$x), range(dt$y)))
+  return(pp)
+}
 
-
+BlinkingCSRTest = function(pp, sd, params, framerate, eta = 1, r = seq(0,300,length.out = 150), nsim = 500) {
+  delt = 1/framerate
+  nblnk = moment.approx(params[2:4], delt)[1]
+  
+  N = round(pp$n*eta/nblnk)
+  
+  Lobsi = Lest(pp, r = r, correction = "border")
+  Lobsi = Lobsi$border-Lobsi$r
+  
+  simf = function() sim_blinking_pp(function() runifpoint(N, win = pp$window), 
+                                    pars.to.simulator(params[2:4], 0, framerate, T), 
+                                    function() rexp(1, params[1]), framerate, noise = 1-eta, s = sd)
+  
+  fi = function(i) {
+    sim.X <- simf()$O
+    ff = Lest(sim.X, r = r, correction = "border")
+    return(ff$border-ff$r)
+  }
+  
+  #library(future.apply)
+  #plan(multisession, workers = 6)
+  #oo = future_sapply(1:500, fi, future.seed = T)
+  oo = sapply(1:nsim, fi)
+  
+  cseti = create_curve_set(list(r=r, obs=Lobsi, sim_m=oo))
+  resi = global_envelope_test(cseti, type="erl")
+  return(resi)
+}

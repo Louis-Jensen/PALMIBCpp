@@ -118,39 +118,3 @@ sim_blinking_pp = function(X_generator, T_generator, ACT_T, framerate, noise = 0
   
   return(list(X = X, Z = Z, E = E, O = O, Labels = cp))
 }
-
-
-#sim = sim_blinking_pp(function() rpoispp(1, win = square(20)), 
-#                pars.to.simulator(c(3,8,0.8), 0, 25, T), 
-#                function() rexp(1, 0.01), 25, noise = 0.01, s = 0.05)
-
-# Simulate from fitted model
-# fitsim = function() {
-#   nr = length(fit$params$rates)
-#   X = fit$data
-#   cutr = fit$extras$cut
-#   fr = fit$extras$framerate
-#   
-#   if(type == "p") {
-#     #parproc = runifpoint(round(fit$params$intensities[4]*area(X$window)), win = X$window)
-#     parproc = rpoispp(fit$params$intensities[4], win = X$window)
-#   } else if(type == "dimer"){
-#     parproc = rThomas(fit$params$intensities[4]/mu, scale = s, mu = mu, win = fit$data$window)
-#   }
-#   else {
-#     parproc = rthin(X, area(X$window)*fit$params$intensities[4]/X$n)
-#   }
-#   print(parproc$n)
-# 
-#   np = rpoispp(fit$params$intensities[3], win = X$window)
-#   np$marks = runif(np$n, 0, max(X$marks))
-#   nproc.o = add.cluster.layer(parproc,pars.to.simulator(fit$params$rates[-nr], tau, fr, T),  0, function() rexp(1, fit$params$rates[nr]),fr )
-#   nproc = noise_add(X = nproc.o, sigs = sigs, frames, k = 1, cutr[1], T)
-#   onadd = attributes(nproc)$s
-#   nproc$marks = nproc$marks/fr
-#   nproc = superimpose(nproc, np)
-#   attributes(nproc)$s = onadd
-# 
-#   return(nproc)
-# }
-

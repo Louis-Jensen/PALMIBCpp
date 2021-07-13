@@ -85,7 +85,7 @@ gam1approx = function(v, par, delt) {
   o[is.nan(o)] = 1
   return(o)
 }
-### New FFT-based PCF and CDF functions for gamma 1. Very fast!
+### FFT-based PCF and CDF functions for gamma 1.
 ubget = function(par) {
   lb = par[1]
   ld = par[2]
@@ -146,7 +146,7 @@ pcf1approx = function(par, delt) {
   return(yo)
 }
 
-nctol1.helper = function(nc,l2,l3,d) {# parametrize in terms of nc, ld, and lr
+nctol1.helper = function(nc,l2,l3,d) {# parametrize loss function in terms of nc, ld, and lr.
   m1 = (l3*d+exp(-l3*d)-1)/(l3*d)
   m2 = (2-2*exp(-l3*d)-2*l3*d+(l3*d)^2)/(l3*d)^2
   
@@ -170,11 +170,6 @@ ncparam = function(par, delt) {
   return(c(lb,l2,l3))
 }
 
-### New FFT based PCF and CDF functions for gamma 1. Very fast!
-meanapprox = function(par, delt, s = 0.01) {
-  return(-diff(gam1approx(c(-s,s), par, delt))/(2*s))
-}
-
 moment.approx = function(par, delt) {
   pt = pars.to.terms(par)
   
@@ -191,7 +186,7 @@ moment.approx = function(par, delt) {
     2*(pt$mf/delt+1)*mur1*(pt$mninf2-pt$mninf)
   
   ov = c(m1,m2,m2/m1-1)
-  names(ov) = c("M1", "M2", "nc")
+  names(ov) = c("Mean G", "M2", "nc")
   return(ov)
 }
 
