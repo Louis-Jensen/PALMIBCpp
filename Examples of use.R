@@ -6,17 +6,11 @@ library(pracma)
 library(spatstat)
 library(markovchain)
 library(GET)
-#library(magrittr)
-#library(wrapr)
-#library(zeallot)
-#library(janitor)
-#library(purrr)
 
 # Loading in the dependencies ----
 # --------------------------------------------------
 # let 'root' be the full path to the IBCpp folder - e.g. root = "C:/Users/Me/Documents/PALMIBCpp/"
-#root = "C:/Users/louis/Documents/PhD/Produced Work/Articles/2019 - A spatio-temporal point-process model for correction of photoblinking artifacts/PALMIBCpp/"
-root = ""
+#root = ""
 ffs = c("Estimation.R", "Gamma1.R", "Misc.R", "Space-Time Simulation.R", "Temporal Simulation.R")
 for(f in ffs) {
   fn = paste(root, "Depend/", f, sep = "")
@@ -48,12 +42,12 @@ dt = read.csv(fn)
 pp = dt_to_pp(dt)
 plot(pp, use.marks = F, pch = 19)
 
-# Estimating kinectic rates. Eta = 1 since we assume no background noise here.
+# Estimating kinectic rates via IBCpp fit. Eta = 1 since we assume no background noise here.
 fit = estimate.IBCpp(pp, framerate, dt$sd, eta = 1)
 
 # Parameters stored as (r_F, r_B, r_D, r_R).
 params = fit$par
-params # True values (0.004, 3, 6, 1).
+params # True values (0.004, 3, 6, 1). Obtained values can vary a bit due to the numerical optimization.
 
 # Mean of G, the total number of reappearances per PA-FP.
 meanG = moment.approx(params[2:4], delt)[1]
@@ -68,18 +62,18 @@ nblink = pars.to.terms(params[2:4])$mninf
 nblink
 
 # Bleaching probability
-p = params[2]/sum(params[2:3])
+p = unname(params[2]/sum(params[2:3]))
 p
 
 # Approximate distribution of G, showing the long tail.
 G = approx.gdist(1e4, params[2:4], delt)
-hist(G, breaks = 100);abline(v = meanG, lty = 2, col = 2)
+hist(G, breaks = 100);abline(v = meanG, lty = 2, col = 2, xlim = c(0,100))
 
 # CDF of time from activation to permanent photobleaching.
 curve(bleach_cdf(params[2:4])(x), 0, 30, xlab = "Time (s)", ylab = "CDF of PA-FP lifetime")
 
 # Quantile function of the bleaching time CDF is also available.
-bleach_qf(params[2:4])(c(0.25,0.5,0.75,0.99))
+bleach_qf(params[2:4])(c(0.25,0.5,0.75,0.99)) # computing the 0.25, 0.5, 0.75, 0.99 quantiles of the bleaching time distribution.
 
 
 
@@ -101,20 +95,21 @@ pp_clus = dt_to_pp(dt_clus)
 plot(pp_csr, use.marks = F, pch = 19)
 plot(pp_clus, use.marks = F, pch = 19)
 
-# Fitting the model to each dataset.
+# Fitting the IBCpp to each dataset.
 fit_csr  = estimate.IBCpp(pp_csr , framerate, dt_csr$sd , eta = 1)
 fit_clus = estimate.IBCpp(pp_clus, framerate, dt_clus$sd, eta = 1)
 
 params_csr  = fit_csr$par
 params_clus = fit_clus$par
 
-# Testing for CSR on CSR data (null model = true). Might take a minute or two per test.
-# Might want to use larger values of nsim if time is not an issue (say, 500).
-CSR_test_null = BlinkingCSRTest(pp_csr , dt_csr$sd , params_csr , 25, nsim = 100)
-CSR_test_clus = BlinkingCSRTest(pp_clus, dt_clus$sd, params_clus, 25, nsim = 100)
+# Testing for CSR on CSR data (null model = true). Can take a minute or two per test.
+# Use larger values of nsim in practice, if time is not an issue (say, 500).
+# Can be sped up significantly using the future.apply package, but we omitted this here for compatability.
+CSR_test_null = BlinkingCSRTest(pp_csr , dt_csr$sd , params_csr , 25, nsim = 100) # Don't mind the warnings!
+CSR_test_clus = BlinkingCSRTest(pp_clus, dt_clus$sd, params_clus, 25, nsim = 100) # Don't mind the warnings!
 
 # Test result when ground truth is CSR.
-plot(CSR_test_null) # The observed L(r)-r function is inside the envelope - I get a pvalue of 12%. Not significant.
+plot(CSR_test_null) # The observed L(r)-r function is inside the envelope - I got a pvalue of 18%. Not significant.
 
 # Test result when ground truth is clustered.
 plot(CSR_test_clus) # The observed L(r)-r function is very clearly outside the envelope - I get a pvalue of < 1%. Highly significantly clustered.
@@ -129,17 +124,19 @@ plot(CSR_test_clus) # The observed L(r)-r function is very clearly outside the e
 # Simulation of blinking data is done by adding blinking clusters to a given protein sample.
 
 # We simulate first proteins. Here we make them CSR, but could be anything.
-win = square(1e4)
+win = square(1e4) # spatial window of observation - 10,000 x 10,000 nm.
 lambdax = 1e-5 # intensity corresponds to roughly 1000 proteins.
-proteins = rpoispp(lambdax, win = win)
-plot(proteins)
+proteins = rpoispp(lambdax, win = win) # Protein sample.
+plot(proteins, pch = 19)
 
 # We set up the blinking dynamics.
 pars = c(0.004,2,8,0.5) # Blinking rates as (r_F, r_B, r_D, r_R).
-framerate = 25 # Desired framerate
-eta = 0.95 # 1 minutes the desired fraction of noise points (eta = 0.95 corresponds to 5% noise).
-sd = abs(rnorm(1e3, 25, 20)) # We simulate some localization uncertainties from a desired distribution. These will be used in simulation.
+framerate = 25 # Desired framerate.
+eta = 0.95 # 1 minus the desired fraction of noise points (so eta = 0.95 corresponds to 5% noise).
+sd = rchisq(1e3, 30) # We simulate some localization uncertainties from a desired distribution. These will be used in simulation.
+hist(sd, xlim = c(0,80))
 
+# sim_blinking_pp is the function that adds blinking clusters to the 'proteins' data.
 a = sim_blinking_pp(function() proteins, 
                 pars.to.simulator(pars[2:4], 0, framerate, T), 
                 function() rexp(1, pars[1]), framerate, noise = 1-eta, s = sd)
@@ -150,10 +147,10 @@ plot(a$O, use.marks = F, pch = 19, cex = 0.25, main = "IBCpp O")
 # Can also color points according to blinking cluster membership
 points(a$O$y~a$O$x, pch = 19, cex = 0.25, col = a$Labels, asp = 1)
 
-# We can plot the frames against space, to get an idea of the blinking dynamics
+# We can plot the timepoints against space, to get an idea of the space-time blinking dynamics
 par(mfrow = c(1,2))
-plot(a$O$marks~a$O$x, use.marks = F, pch = 19, cex = 0.25, main = "IBCpp O", xlab = "x", ylab = "Time (s)")
-plot(a$O$marks~a$O$x, use.marks = F, pch = 19, cex = 0.25, main = "IBCpp O", xlab = "x", ylab = "Time (s)", ylim = c(0,500))
+plot(a$O$marks~a$O$x, pch = 19, cex = 0.25, main = "IBCpp O", xlab = "x", ylab = "Time (s)",col = a$Labels)
+plot(a$O$marks~a$O$x, pch = 19, cex = 0.25, main = "IBCpp O", xlab = "x", ylab = "Time (s)", ylim = c(0,500), col = a$Labels)
 par(mfrow = c(1,1))
 
 # Blinking clusters without noise are in Z
@@ -161,5 +158,19 @@ plot(a$Z, use.marks = F, pch = 19, cex = 0.25, main = "Z")
 
 # The nosie points are in E
 plot(a$E, use.marks = F, pch = 19, cex = 0.25, main = "E")
+
+# More generally, we can give a protein simulator to sim_blinking_pp to get a new protein realization each time.
+simf = function(i)  sim_blinking_pp(function() rpoispp(lambdax, win = win), 
+                    pars.to.simulator(pars[2:4], 0, framerate, T), 
+                    function() rexp(1, pars[1]), framerate, noise = 1-eta, s = sd)
+
+par(mfrow = c(2,2), mai = rep(0.1,4))
+simlist = sapply(1:4, function(i) simf(i)) # simulating 4 realizations.
+
+for(i in 1:4) {
+  plot(simlist[,i]$O, pch = 19, cex = 0.25, use.marks = F, main = i) # plotting results.
+}
+
+
 
 
