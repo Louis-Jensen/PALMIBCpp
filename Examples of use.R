@@ -5,7 +5,7 @@ library(tidyverse)
 library(pracma)
 library(spatstat)
 library(markovchain)
-library(GET)
+library(GET) # For CSR testing.
 
 # Loading in the dependencies ----
 # --------------------------------------------------
