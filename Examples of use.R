@@ -10,7 +10,7 @@ library(GET)
 # Loading in the dependencies ----
 # --------------------------------------------------
 # let 'root' be the full path to the IBCpp folder - e.g. root = "C:/Users/Me/Documents/PALMIBCpp/"
-#root = ""
+root = ""
 ffs = c("Estimation.R", "Gamma1.R", "Misc.R", "Space-Time Simulation.R", "Temporal Simulation.R")
 for(f in ffs) {
   fn = paste(root, "Depend/", f, sep = "")
