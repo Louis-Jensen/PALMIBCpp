@@ -102,7 +102,7 @@ fit_clus = estimate.IBCpp(pp_clus, framerate, dt_clus$sd, eta = 1)
 params_csr  = fit_csr$par
 params_clus = fit_clus$par
 
-# Testing for CSR on CSR data (null model = true). Can take a minute or two per test.
+# Testing for CSR. Can take a minute or two per test.
 # Use larger values of nsim in practice, if time is not an issue (say, 500).
 # Can be sped up significantly using the future.apply package, but we omitted this here for compatability.
 CSR_test_null = BlinkingCSRTest(pp_csr , dt_csr$sd , params_csr , 25, nsim = 100) # Don't mind the warnings!
